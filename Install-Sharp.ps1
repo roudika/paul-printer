@@ -1,7 +1,7 @@
 # --- CONFIGURATION ---
 $ZipUrl = "https://github.com/roudika/paul-printer/archive/refs/tags/v1.0.zip"
 $PrinterIP = "192.168.1.50"
-$PrinterName = "Sharp Hall Printer [Ladenburg]"
+$PrinterName = "Sharp 1 - Hall Printer [Ladenburg]"
 $DriverName = "SHARP MX-3061 PCL6"
 
 # --- WORKSPACE ---
