@@ -4,35 +4,44 @@ $PrinterIP   = "192.168.1.50"
 $PrinterName = "Sharp Hall Printer [Ladenburg]"
 $DriverName  = "SHARP MX-3061 PCL6"
 
-# This matches the internal path of your ZIP structure
-$InfRelativePath = "paul-printer-1.0\SHARP-MX3061\English\PCL6\64bit\su2emenu.inf"
-
-# --- PREPARATION ---
+# --- WORKSPACE ---
 $TempDir = "$env:TEMP\SharpPrinter"
+$DownloadPath = "$TempDir\github_download.zip"
+
 if (Test-Path $TempDir) { Remove-Item $TempDir -Recurse -Force }
 New-Item -ItemType Directory -Path $TempDir | Out-Null
 
-# 1. Download the ZIP from GitHub
-Write-Host "Downloading drivers from GitHub..." -ForegroundColor Cyan
-Invoke-WebRequest -Uri $ZipUrl -OutFile "$TempDir\drivers.zip"
+# 1. Download the GitHub Release ZIP
+Write-Host "Downloading from GitHub..." -ForegroundColor Cyan
+Invoke-WebRequest -Uri $ZipUrl -OutFile $DownloadPath
 
-# 2. Extract the ZIP
-Write-Host "Extracting files..." -ForegroundColor Cyan
-Expand-Archive -Path "$TempDir\drivers.zip" -DestinationPath $TempDir
+# 2. Extract the GitHub Archive (the paul-printer-1.0 folder)
+Write-Host "Extracting GitHub Archive..." -ForegroundColor Cyan
+Expand-Archive -Path $DownloadPath -DestinationPath $TempDir -Force
 
-# 3. Locate the INF file
-$FullInfPath = Join-Path $TempDir $InfRelativePath
-
-if (-not (Test-Path $FullInfPath)) {
-    Write-Error "Could not find INF at: $FullInfPath. Check your ZIP folder structure."
-    return
+# 3. Find and Extract the INTERNAL Driver ZIP (SHARP-MX3061.zip)
+$InternalZip = Get-ChildItem -Path $TempDir -Filter "SHARP-MX3061.zip" -Recurse | Select-Object -First 1
+if ($null -eq $InternalZip) {
+    Write-Error "Could not find SHARP-MX3061.zip inside the GitHub download."
+    exit
 }
 
-# 4. Windows Installation Commands
-Write-Host "Installing driver and creating printer..." -ForegroundColor Yellow
-pnputil.exe /add-driver "$FullInfPath" /install
+Write-Host "Extracting internal driver files..." -ForegroundColor Cyan
+$DriverExtractPath = "$TempDir\DriverFiles"
+Expand-Archive -Path $InternalZip.FullName -DestinationPath $DriverExtractPath -Force
+
+# 4. Find the .inf file inside the newly extracted driver folder
+$InfFile = Get-ChildItem -Path $DriverExtractPath -Filter "su2emenu.inf" -Recurse | Select-Object -First 1
+if ($null -eq $InfFile) {
+    Write-Error "Still could not find su2emenu.inf. Check the contents of SHARP-MX3061.zip"
+    exit
+}
+
+# 5. Final Installation
+Write-Host "Installing driver: $($InfFile.FullName)" -ForegroundColor Yellow
+pnputil.exe /add-driver "$($InfFile.FullName)" /install
 Add-PrinterDriver -Name $DriverName
 Add-PrinterPort -Name "IP_$PrinterIP" -PrinterHostAddress $PrinterIP
 Add-Printer -Name $PrinterName -DriverName $DriverName -PortName "IP_$PrinterIP"
 
-Write-Host "Success! '$PrinterName' is installed." -ForegroundColor Green
+Write-Host "Installation Finished Successfully!" -ForegroundColor Green
