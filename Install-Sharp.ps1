@@ -42,30 +42,36 @@ if ($ExistingPrinter -or $ExistingPort) {
         # Find ALL printers using this port (even those with different names)
         $PrintersUsingPort = Get-Printer | Where-Object { $_.PortName -eq "IP_$PrinterIP" -or $_.Name -eq $PrinterName }
         
-        foreach ($P in $PrintersUsingPort) {
-            Write-Host " - Removing printer: $($P.Name)" -ForegroundColor Gray
-            Remove-Printer -Name $P.Name
-        }
+        if ($PrintersUsingPort.Count -gt 0) {
+            foreach ($P in $PrintersUsingPort) {
+                Write-Host " - Removing printer: $($P.Name)" -ForegroundColor Gray
+                Remove-Printer -Name $P.Name -ErrorAction SilentlyContinue
+            }
 
-        # Wait for printers to be fully purged (up to 5 seconds)
-        Write-Host " - Waiting for spooler to sync..." -ForegroundColor Gray
-        for ($i = 0; $i -lt 5; $i++) {
-            if (-not (Get-Printer | Where-Object { $_.PortName -eq "IP_$PrinterIP" -or $_.Name -eq $PrinterName })) { break }
-            Start-Sleep -Seconds 1
+            # Wait for printers to be fully purged (up to 10 seconds)
+            Write-Host " - Waiting for spooler to release port..." -ForegroundColor Gray
+            for ($i = 0; $i -lt 10; $i++) {
+                $Remaining = Get-Printer | Where-Object { $_.PortName -eq "IP_$PrinterIP" -or $_.Name -eq $PrinterName }
+                if (-not $Remaining) { break }
+                Start-Sleep -Seconds 1
+            }
         }
 
         if (Get-PrinterPort -Name "IP_$PrinterIP" -ErrorAction SilentlyContinue) { 
             Write-Host " - Removing port: IP_$PrinterIP" -ForegroundColor Gray
-            # Attempt port removal multiple times as it's often locked briefly
-            for ($j = 0; $j -lt 3; $j++) {
+            # Attempt port removal multiple times
+            for ($j = 0; $j -lt 5; $j++) {
                 try {
                     Remove-PrinterPort -Name "IP_$PrinterIP" -ErrorAction Stop
+                    $PortRemoved = $true
                     break
                 }
                 catch {
-                    if ($j -eq 2) { Write-Host " ! Warning: Port still locked. New printer will attempt to reuse it." -ForegroundColor Yellow }
-                    else { Start-Sleep -Seconds 1 }
+                    Start-Sleep -Seconds 1
                 }
+            }
+            if (-not $PortRemoved) {
+                Write-Host " ! Note: Port is busy. Will attempt to reconfigure it in-place." -ForegroundColor Yellow
             }
         }
         Write-Host "Cleanup complete.`n" -ForegroundColor Green
@@ -81,8 +87,8 @@ if ($ExistingPrinter -or $ExistingPort) {
 
 
 # 3. INSTALLATION
-Write-Host "Installing driver to Windows Store..." -ForegroundColor Yellow
-pnputil.exe /add-driver "$($InfFile.FullName)" /install
+Write-Host "Installing driver to Windows Driver Store..." -ForegroundColor Yellow
+pnputil.exe /add-driver "$($InfFile.FullName)" /install | Out-Null
 
 Write-Host "Adding Driver to Print Subsystem..." -ForegroundColor Yellow
 Add-PrinterDriver -Name $DriverName
@@ -93,21 +99,37 @@ if (-not (Get-PrinterPort -Name "IP_$PrinterIP" -ErrorAction SilentlyContinue)) 
     Add-PrinterPort -Name "IP_$PrinterIP" -PrinterHostAddress $PrinterIP
 }
 
-# Add or Update Printer (with retry for race conditions)
-Write-Host "Configuring Printer..." -ForegroundColor Yellow
+# Add or Update Printer
+# We use a combined approach to handle 'ghost' printers that Get-Printer might miss
+Write-Host "Configuring Printer: $PrinterName" -ForegroundColor Yellow
+$OperationSuccess = $false
+
+# Try 1: Add fresh
 try {
-    if (-not (Get-Printer -Name $PrinterName -ErrorAction SilentlyContinue)) {
-        Add-Printer -Name $PrinterName -DriverName $DriverName -PortName "IP_$PrinterIP" -ErrorAction Stop
-        Write-Host "Success! Printer installed." -ForegroundColor Green
-    }
-    else {
-        throw "Printer already exists"
-    }
+    Add-Printer -Name $PrinterName -DriverName $DriverName -PortName "IP_$PrinterIP" -ErrorAction Stop
+    Write-Host "Success! Printer installed." -ForegroundColor Green
+    $OperationSuccess = $true
 }
 catch {
-    # Fallback to Set-Printer if Add fails or if it already exists
-    Set-Printer -Name $PrinterName -DriverName $DriverName -PortName "IP_$PrinterIP"
-    Write-Host "Success! Printer configured/updated." -ForegroundColor Green
+    # If it fails (e.g. already exists), try to update it
+    try {
+        Set-Printer -Name $PrinterName -DriverName $DriverName -PortName "IP_$PrinterIP" -ErrorAction Stop
+        Write-Host "Success! Printer updated." -ForegroundColor Green
+        $OperationSuccess = $true
+    }
+    catch {
+        Write-Host " ! Warning: Initial config failed. Retrying in 2 seconds..." -ForegroundColor Yellow
+        Start-Sleep -Seconds 2
+        Set-Printer -Name $PrinterName -DriverName $DriverName -PortName "IP_$PrinterIP" -ErrorAction SilentlyContinue
+        if ($?) { 
+            Write-Host "Success! Printer configured." -ForegroundColor Green
+            $OperationSuccess = $true
+        }
+    }
+}
+
+if (-not $OperationSuccess) {
+    Write-Host "ERROR: Could not configure printer. Please check if another printer is using the name or port." -ForegroundColor Red
 }
 
 
