@@ -9,44 +9,53 @@ $TempDir = "$env:TEMP\SharpPrinter"
 if (Test-Path $TempDir) { Remove-Item $TempDir -Recurse -Force }
 New-Item -ItemType Directory -Path $TempDir | Out-Null
 
-# 1. Download the main GitHub ZIP
-Write-Host "Downloading from GitHub..." -ForegroundColor Cyan
+# 1. Download and Extract
+Write-Host "Downloading and preparing files..." -ForegroundColor Cyan
 Invoke-WebRequest -Uri $ZipUrl -OutFile "$TempDir\main.zip"
-
-# 2. Extract the main ZIP (This creates the 'paul-printer-1.0' folder)
-Write-Host "Extracting GitHub folder..." -ForegroundColor Cyan
 Expand-Archive -Path "$TempDir\main.zip" -DestinationPath $TempDir -Force
 
-# 3. Find and extract the internal SHARP-MX3061.zip
 $InternalZip = Get-ChildItem -Path $TempDir -Filter "SHARP-MX3061.zip" -Recurse | Select-Object -First 1
-if ($null -eq $InternalZip) {
-    Write-Error "Could not find SHARP-MX3061.zip inside the download."
-    exit
-}
-
-Write-Host "Extracting internal driver ZIP..." -ForegroundColor Cyan
 $DriverFilesPath = "$TempDir\DriverUnzipped"
 Expand-Archive -Path $InternalZip.FullName -DestinationPath $DriverFilesPath -Force
-
-# 4. Find the .inf file anywhere inside that new folder
 $InfFile = Get-ChildItem -Path $DriverFilesPath -Filter "su2emenu.inf" -Recurse | Select-Object -First 1
-if ($null -eq $InfFile) {
-    Write-Error "Could not find su2emenu.inf inside the driver ZIP."
-    exit
+
+# 2. USER PROMPT FOR CLEANUP
+$UserResponse = Read-Host "Do you want to DELETE existing printer/port for a clean install? (y/n)"
+
+if ($UserResponse -eq 'y') {
+    Write-Host "Cleaning up existing configuration..." -ForegroundColor Yellow
+    
+    # Remove Printer
+    if (Get-Printer -Name $PrinterName -ErrorAction SilentlyContinue) {
+        Write-Host "Removing existing printer: $PrinterName" -ForegroundColor Gray
+        Remove-Printer -Name $PrinterName
+    }
+
+    # Remove Port
+    if (Get-PrinterPort -Name "IP_$PrinterIP" -ErrorAction SilentlyContinue) {
+        Write-Host "Removing existing port: IP_$PrinterIP" -ForegroundColor Gray
+        Remove-PrinterPort -Name "IP_$PrinterIP"
+    }
+} else {
+    Write-Host "Skipping cleanup. Proceeding with standard installation..." -ForegroundColor Gray
 }
 
-$FullInfPath = $InfFile.FullName
-Write-Host "Found INF at: $FullInfPath" -ForegroundColor Green
-
-# 5. Final Installation Commands
+# 3. INSTALLATION
 Write-Host "Installing driver to Windows Store..." -ForegroundColor Yellow
-pnputil.exe /add-driver "$FullInfPath" /install
+pnputil.exe /add-driver "$($InfFile.FullName)" /install
 
 Write-Host "Adding Driver to Print Subsystem..." -ForegroundColor Yellow
 Add-PrinterDriver -Name $DriverName
 
-Write-Host "Creating Port and Printer..." -ForegroundColor Yellow
-Add-PrinterPort -Name "IP_$PrinterIP" -PrinterHostAddress $PrinterIP
-Add-Printer -Name $PrinterName -DriverName $DriverName -PortName "IP_$PrinterIP"
+# Add Port (Only if it doesn't exist now)
+if (-not (Get-PrinterPort -Name "IP_$PrinterIP" -ErrorAction SilentlyContinue)) {
+    Add-PrinterPort -Name "IP_$PrinterIP" -PrinterHostAddress $PrinterIP
+}
 
-Write-Host "Success! Printer installed." -ForegroundColor Green
+# Add Printer (Only if it doesn't exist now)
+if (-not (Get-Printer -Name $PrinterName -ErrorAction SilentlyContinue)) {
+    Add-Printer -Name $PrinterName -DriverName $DriverName -PortName "IP_$PrinterIP"
+    Write-Host "Success! Printer installed." -ForegroundColor Green
+} else {
+    Write-Host "Printer already exists. No changes made." -ForegroundColor Cyan
+}
