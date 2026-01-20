@@ -25,7 +25,7 @@ $UserResponse = Read-Host "Do you want to DELETE existing printer/port for a cle
 if ($UserResponse -eq 'y') {
     Write-Host "Cleaning up existing configuration..." -ForegroundColor Yellow
     
-    # Remove Printer
+    # Remove Printer (Must happen before port removal)
     if (Get-Printer -Name $PrinterName -ErrorAction SilentlyContinue) {
         Write-Host "Removing existing printer: $PrinterName" -ForegroundColor Gray
         Remove-Printer -Name $PrinterName
@@ -47,15 +47,25 @@ pnputil.exe /add-driver "$($InfFile.FullName)" /install
 Write-Host "Adding Driver to Print Subsystem..." -ForegroundColor Yellow
 Add-PrinterDriver -Name $DriverName
 
-# Add Port (Only if it doesn't exist now)
+# Add Port (Only if it doesn't exist)
 if (-not (Get-PrinterPort -Name "IP_$PrinterIP" -ErrorAction SilentlyContinue)) {
     Add-PrinterPort -Name "IP_$PrinterIP" -PrinterHostAddress $PrinterIP
 }
 
-# Add Printer (Only if it doesn't exist now)
+# Add Printer
 if (-not (Get-Printer -Name $PrinterName -ErrorAction SilentlyContinue)) {
     Add-Printer -Name $PrinterName -DriverName $DriverName -PortName "IP_$PrinterIP"
     Write-Host "Success! Printer installed." -ForegroundColor Green
+    
+    # Optional: Set as Default
+    $SetDefault = Read-Host "Set $PrinterName as the default printer? (y/n)"
+    if ($SetDefault -eq 'y') {
+        (Get-WmiObject -Query "Select * from Win32_Printer Where Name = '$PrinterName'").SetDefaultPrinter()
+        Write-Host "Set as default printer." -ForegroundColor Green
+    }
 } else {
     Write-Host "Printer already exists. No changes made." -ForegroundColor Cyan
 }
+
+# Clean up temp files
+Remove-Item $TempDir -Recurse -Force
