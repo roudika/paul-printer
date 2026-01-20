@@ -34,7 +34,8 @@ if ($ExistingPrinter -or $ExistingPort) {
     if ($ExistingPrinter) { Write-Host " - Printer '$PrinterName' already exists." -ForegroundColor Gray }
     if ($ExistingPort) { Write-Host " - Port 'IP_$PrinterIP' already exists." -ForegroundColor Gray }
     
-    $UserResponse = Read-Host "`nDo you want to REMOVE existing configuration for a clean install? (y/n)"
+    $UserResponse = Read-Host "`nDo you want to REMOVE existing configuration for a clean install? [Y/n]"
+    if ([string]::IsNullOrWhiteSpace($UserResponse)) { $UserResponse = 'y' }
     
     if ($UserResponse -eq 'y') {
         Write-Host "Cleaning up..." -ForegroundColor Yellow
@@ -134,7 +135,9 @@ if (-not $OperationSuccess) {
 
 
 # 4. OPTIONAL: Set as Default
-$SetDefault = Read-Host "`nSet $PrinterName as the default printer? (y/n)"
+$SetDefault = Read-Host "`nSet $PrinterName as the default printer? [Y/n]"
+if ([string]::IsNullOrWhiteSpace($SetDefault)) { $SetDefault = 'y' }
+
 if ($SetDefault -eq 'y') {
     Set-DefaultPrinter -Name $PrinterName
     Write-Host "Set as default printer." -ForegroundColor Green
