@@ -1,4 +1,5 @@
 # --- CONFIGURATION ---
+# Script Version: 1.2
 $ZipUrl = "https://github.com/roudika/paul-printer/releases/download/BP-51C26/SHARP_BP-51C26.zip"
 $PrinterIP = "10.50.30.50"
 $OldPrinterIP = "10.50.30.30"
@@ -6,7 +7,7 @@ $OldPrinterName = "SHARP MX-2651"
 $PrinterName = "SHARP BP-51C26 - Prod 1"
 $DriverName = "SHARP BP-51C26 PCL6"
 
-# Helper to prevent "Invalid Handle" errors in some terminal environments
+# Helper to prevent "Invalid Handle" errors
 function Write-Log ($Message, $Color = "Cyan") {
     try {
         Write-Host $Message -ForegroundColor $Color
@@ -14,6 +15,8 @@ function Write-Log ($Message, $Color = "Cyan") {
         Write-Output "[$Color] $Message"
     }
 }
+
+Write-Log "--- Sharp Printer Installer v1.2 ---" "Magenta"
 
 # --- WORKSPACE ---
 $TempDir = "$env:TEMP\SharpPrinter"
@@ -27,65 +30,59 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     exit
 }
 
-# 0.5 Ensure Print Spooler is running (Fixes CIM/Access Denied issues)
-$Spooler = Get-Service -Name Spooler -ErrorAction SilentlyContinue
-if ($Spooler.Status -ne 'Running') {
-    Write-Log "Print Spooler is not running. Starting it now..." "Yellow"
-    Start-Service -Name Spooler
-    Start-Sleep -Seconds 2
+# 0.5 Ensure Print Spooler is running
+try {
+    $Spooler = Get-Service -Name Spooler -ErrorAction Stop
+    if ($Spooler.Status -ne 'Running') {
+        Write-Log "Print Spooler is not running. Starting it now..." "Yellow"
+        Start-Service -Name Spooler
+        Start-Sleep -Seconds 2
+    }
+} catch {
+    Write-Log "Warning: Could not check Print Spooler service status." "Yellow"
 }
 
 # 1. Download and Extract
-Write-Log "Downloading and preparing files..." "Cyan"
+Write-Log "Preparing driver files..." "Cyan"
 Invoke-WebRequest -Uri $ZipUrl -OutFile "$TempDir\driver.zip"
 Expand-Archive -Path "$TempDir\driver.zip" -DestinationPath $TempDir -Force
 
-# Automatically find the INF file
 $InfFile = Get-ChildItem -Path $TempDir -Filter "sw1emenu.inf" -Recurse | Select-Object -First 1
-
 if (-not $InfFile) {
-    Write-Log "ERROR: Could not find sw1emenu.inf in the extracted files." "Red"
+    Write-Log "ERROR: Could not find sw1emenu.inf." "Red"
     exit
 }
 
 # 1.5. Clean up old printer configurations
-Write-Log "Checking for old printer configurations..." "Cyan"
-$OldPortName = "IP_$OldPrinterIP"
-$OldPortNameRaw = $OldPrinterIP
+Write-Log "Searching for old device ($OldPrinterIP / $OldPrinterName)..." "Cyan"
+$OldPrinters = $null
+$OldPortExists = $false
 
-# Find printers matching the old IP port or the old name
-$OldPrinters = Get-Printer | Where-Object { 
-    $_.PortName -eq $OldPortName -or 
-    $_.PortName -eq $OldPortNameRaw -or 
-    $_.Name -eq $OldPrinterName -or 
-    $_.Name -like "*$OldPrinterName*" 
+try {
+    # Check for printers
+    $OldPrinters = Get-Printer -ErrorAction SilentlyContinue | Where-Object { 
+        $_.PortName -match $OldPrinterIP -or $_.Name -like "*$OldPrinterName*" 
+    }
+    
+    # Check for ports
+    if (Get-PrinterPort -Name "IP_$OldPrinterIP" -ErrorAction SilentlyContinue) { $OldPortExists = $true }
+    if (Get-PrinterPort -Name $OldPrinterIP -ErrorAction SilentlyContinue) { $OldPortExists = $true }
+} catch {
+    Write-Log " ! Warning: System query failed, but attempt to clean up will continue." "Yellow"
 }
 
-$OldPortExists = (Get-PrinterPort -Name $OldPortName -ErrorAction SilentlyContinue) -or (Get-PrinterPort -Name $OldPortNameRaw -ErrorAction SilentlyContinue)
-
 if ($OldPrinters -or $OldPortExists) {
-    Write-Log "Old printer/port detected. Removing..." "Yellow"
-    
-    if ($OldPrinters) {
-        foreach ($P in $OldPrinters) {
-            Write-Log " - Removing printer: $($P.Name)" "Gray"
-            Remove-Printer -Name $P.Name -ErrorAction SilentlyContinue
-        }
+    Write-Log "Old device detected. Removing..." "Yellow"
+    foreach ($P in $OldPrinters) {
+        Write-Log " - Removing printer: $($P.Name)" "Gray"
+        Remove-Printer -Name $P.Name -ErrorAction SilentlyContinue
     }
-    
     Start-Sleep -Seconds 2
-    
-    if (Get-PrinterPort -Name $OldPortName -ErrorAction SilentlyContinue) {
-        Write-Log " - Removing port: $OldPortName" "Gray"
-        Remove-PrinterPort -Name $OldPortName -ErrorAction SilentlyContinue
-    }
-    if (Get-PrinterPort -Name $OldPortNameRaw -ErrorAction SilentlyContinue) {
-        Write-Log " - Removing port: $OldPortNameRaw" "Gray"
-        Remove-PrinterPort -Name $OldPortNameRaw -ErrorAction SilentlyContinue
-    }
+    Remove-PrinterPort -Name "IP_$OldPrinterIP" -ErrorAction SilentlyContinue
+    Remove-PrinterPort -Name $OldPrinterIP -ErrorAction SilentlyContinue
     Write-Log "Cleanup of old devices complete.`n" "Green"
 } else {
-    Write-Log "No old devices found ($OldPrinterIP / $OldPrinterName). OK.`n" "Gray"
+    Write-Log "No old devices found matching $OldPrinterIP or $OldPrinterName.`n" "Gray"
 }
 
 
