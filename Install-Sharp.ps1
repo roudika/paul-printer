@@ -1,8 +1,9 @@
 # --- CONFIGURATION ---
-$ZipUrl = "https://github.com/roudika/paul-printer/archive/refs/tags/v1.0.zip"
-$PrinterIP = "192.168.1.50"
-$PrinterName = "Sharp 1 - Hall Printer [Ladenburg]"
-$DriverName = "SHARP MX-3061 PCL6"
+$ZipUrl = "https://github.com/roudika/paul-printer/releases/download/BP-51C26/SHARP_BP-51C26.zip"
+$PrinterIP = "10.50.30.50"
+$OldPrinterIP = "10.50.30.30"
+$PrinterName = "SHARP BP-51C26 - Prod 1"
+$DriverName = "SHARP BP-51C26 PCL6"
 
 # --- WORKSPACE ---
 $TempDir = "$env:TEMP\SharpPrinter"
@@ -17,13 +18,39 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 
 # 1. Download and Extract
 Write-Host "Downloading and preparing files..." -ForegroundColor Cyan
-Invoke-WebRequest -Uri $ZipUrl -OutFile "$TempDir\main.zip"
-Expand-Archive -Path "$TempDir\main.zip" -DestinationPath $TempDir -Force
+Invoke-WebRequest -Uri $ZipUrl -OutFile "$TempDir\driver.zip"
+Expand-Archive -Path "$TempDir\driver.zip" -DestinationPath $TempDir -Force
 
-$InternalZip = Get-ChildItem -Path $TempDir -Filter "SHARP-MX3061.zip" -Recurse | Select-Object -First 1
-$DriverFilesPath = "$TempDir\DriverUnzipped"
-Expand-Archive -Path $InternalZip.FullName -DestinationPath $DriverFilesPath -Force
-$InfFile = Get-ChildItem -Path $DriverFilesPath -Filter "su2emenu.inf" -Recurse | Select-Object -First 1
+# Automatically find the INF file (usually in English\PCL6\64bit\)
+$InfFile = Get-ChildItem -Path $TempDir -Filter "sw1emenu.inf" -Recurse | Select-Object -First 1
+
+if (-not $InfFile) {
+    Write-Host "ERROR: Could not find sw1emenu.inf in the extracted files." -ForegroundColor Red
+    exit
+}
+
+# 1.5. Clean up old printer (10.50.30.30) if exists
+Write-Host "Checking for old printer configuration ($OldPrinterIP)..." -ForegroundColor Cyan
+$OldPortName = "IP_$OldPrinterIP"
+$OldPrinters = Get-Printer | Where-Object { $_.PortName -eq $OldPortName }
+
+if ($OldPrinters -or (Get-PrinterPort -Name $OldPortName -ErrorAction SilentlyContinue)) {
+    Write-Host "Found old printer/port on $OldPrinterIP. Removing..." -ForegroundColor Yellow
+    foreach ($P in $OldPrinters) {
+        Write-Host " - Removing printer: $($P.Name)" -ForegroundColor Gray
+        Remove-Printer -Name $P.Name -ErrorAction SilentlyContinue
+    }
+    
+    # Wait for spooler
+    Start-Sleep -Seconds 2
+    
+    if (Get-PrinterPort -Name $OldPortName -ErrorAction SilentlyContinue) {
+        Write-Host " - Removing port: $OldPortName" -ForegroundColor Gray
+        Remove-PrinterPort -Name $OldPortName -ErrorAction SilentlyContinue
+    }
+    Write-Host "Old configuration for $OldPrinterIP removed.`n" -ForegroundColor Green
+}
+
 
 # 2. CONFLICT DETECTION & CLEANUP
 $ExistingPrinter = Get-Printer -Name $PrinterName -ErrorAction SilentlyContinue
