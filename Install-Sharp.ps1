@@ -2,6 +2,7 @@
 $ZipUrl = "https://github.com/roudika/paul-printer/releases/download/BP-51C26/SHARP_BP-51C26.zip"
 $PrinterIP = "10.50.30.50"
 $OldPrinterIP = "10.50.30.30"
+$OldPrinterName = "SHARP MX-2651"
 $PrinterName = "SHARP BP-51C26 - Prod 1"
 $DriverName = "SHARP BP-51C26 PCL6"
 
@@ -29,26 +30,29 @@ if (-not $InfFile) {
     exit
 }
 
-# 1.5. Clean up old printer (10.50.30.30) if exists
-Write-Host "Checking for old printer configuration ($OldPrinterIP)..." -ForegroundColor Cyan
+# 1.5. Clean up old printer (10.50.30.30 and SHARP MX-2651) if exists
+Write-Host "Checking for old printer configurations..." -ForegroundColor Cyan
 $OldPortName = "IP_$OldPrinterIP"
-$OldPrinters = Get-Printer | Where-Object { $_.PortName -eq $OldPortName }
+
+# Find printers by IP or Name
+$OldPrinters = Get-Printer | Where-Object { $_.PortName -eq $OldPortName -or $_.Name -eq $OldPrinterName }
 
 if ($OldPrinters -or (Get-PrinterPort -Name $OldPortName -ErrorAction SilentlyContinue)) {
-    Write-Host "Found old printer/port on $OldPrinterIP. Removing..." -ForegroundColor Yellow
+    Write-Host "Old printer/port detected. Removing..." -ForegroundColor Yellow
+    
     foreach ($P in $OldPrinters) {
         Write-Host " - Removing printer: $($P.Name)" -ForegroundColor Gray
         Remove-Printer -Name $P.Name -ErrorAction SilentlyContinue
     }
     
-    # Wait for spooler
+    # Wait for spooler to update
     Start-Sleep -Seconds 2
     
     if (Get-PrinterPort -Name $OldPortName -ErrorAction SilentlyContinue) {
         Write-Host " - Removing port: $OldPortName" -ForegroundColor Gray
         Remove-PrinterPort -Name $OldPortName -ErrorAction SilentlyContinue
     }
-    Write-Host "Old configuration for $OldPrinterIP removed.`n" -ForegroundColor Green
+    Write-Host "Cleanup of old devices complete.`n" -ForegroundColor Green
 }
 
 
@@ -166,7 +170,7 @@ $SetDefault = Read-Host "`nSet $PrinterName as the default printer? [Y/n]"
 if ([string]::IsNullOrWhiteSpace($SetDefault)) { $SetDefault = 'y' }
 
 if ($SetDefault -eq 'y') {
-    Set-DefaultPrinter -Name $PrinterName
+    (New-Object -ComObject WScript.Network).SetDefaultPrinter($PrinterName)
     Write-Host "Set as default printer." -ForegroundColor Green
 }
 
