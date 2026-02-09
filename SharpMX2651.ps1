@@ -3,12 +3,12 @@
 # Sharp MX-2651 installer - download drivers from GitHub, remove old printers (EPSON/WF-C869R), add new one.
 
 $ZipUrl = "https://github.com/roudika/paul-printer/releases/download/MX2651/MX2651.zip"
-$PrinterIP = "192.168.19.69"
+$PrinterIP = "192.168.10.69"
 $PrinterName = "THA-Sharp"
 $DriverName = "SHARP MX-2651 PCL6"
 
 # IPs and names to remove before install: EPSON (any), WF-C869R (any), 192.168.10.69, 192.168.19.69
-$OldPrinterIPs = @("192.168.10.69", "192.168.19.69")
+$OldPrinterIPs = @("192.168.10.69")
 $OldPrinterNamePatterns = @("*EPSON*", "*WF-C869R*")
 $InfFileName = "su2emenu.inf"
 
@@ -179,3 +179,4 @@ if ($SetDefault -eq 'y' -and $OperationSuccess) {
 # Cleanup
 Remove-Item $TempDir -Recurse -Force -ErrorAction SilentlyContinue
 Write-Log "`nDone." "Green"
+
