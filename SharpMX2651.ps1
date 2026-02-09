@@ -1,5 +1,5 @@
 # --- CONFIGURATION ---
-# Script Version: 1.0
+# Script Version: 1.2
 # Sharp MX-2651 installer - download drivers from GitHub, remove old printers (EPSON/WF-C869R), add new one.
 
 $ZipUrl = "https://github.com/roudika/paul-printer/releases/download/MX2651/MX2651.zip"
@@ -179,3 +179,4 @@ if ($SetDefault -eq 'y' -and $OperationSuccess) {
 # Cleanup
 Remove-Item $TempDir -Recurse -Force -ErrorAction SilentlyContinue
 Write-Log "`nDone." "Green"
+
