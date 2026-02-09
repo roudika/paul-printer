@@ -21,7 +21,7 @@ function Write-Log ($Message, $Color = "Cyan") {
     }
 }
 
-Write-Log "--- Sharp MX-2651 Printer Installer v1.0 ---" "Magenta"
+Write-Log "--- Sharp MX-2651 Printer Installer v1.2 ---" "Magenta"
 
 # --- WORKSPACE ---
 $TempDir = "$env:TEMP\SharpMX2651"
@@ -179,4 +179,5 @@ if ($SetDefault -eq 'y' -and $OperationSuccess) {
 # Cleanup
 Remove-Item $TempDir -Recurse -Force -ErrorAction SilentlyContinue
 Write-Log "`nDone." "Green"
+
 
