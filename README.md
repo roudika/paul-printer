@@ -9,6 +9,10 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; irm "https://is.gd/t0qEjV" | i
 
 ---------------------------
 Sharp MX-2651
-
+https://is.gd/atEDyx
 Set-ExecutionPolicy Bypass -Scope Process -Force; 
 irm "https://raw.githubusercontent.com/roudika/paul-printer/main/SharpMX2651.ps1" | iex
+
+
+Set-ExecutionPolicy Bypass -Scope Process -Force; 
+irm "https://is.gd/atEDyx" | iex
